@@ -101,15 +101,51 @@ class SamadRepository(
         return sb.toString()
     }
 
+    /**
+     * Persian/Arabic keyboards type passwords with ۰-۹ / ٠-٩ digits. The Samad server
+     * compares the raw string, so such a password is always rejected with invalid_grant.
+     * Only convert when the whole password is made of Persian/Arabic digits, so real
+     * passwords that intentionally contain those characters stay untouched.
+     */
+    private fun normalizeDigitOnlyPassword(input: String): String {
+        val converted = normalizeDigits(input)
+        return if (converted != input && converted.isNotEmpty() && converted.all { it in '0'..'9' }) {
+            converted
+        } else {
+            input
+        }
+    }
+
+    /** Username cleanup: digits, invisible RTL marks and stray whitespace. */
+    private fun normalizeUsername(input: String): String {
+        return normalizeDigits(input)
+            .replace("\u200c", "")
+            .replace("\u200e", "")
+            .replace("\u200f", "")
+            .replace("\u202a", "")
+            .replace("\u202b", "")
+            .replace("\u202c", "")
+            .trim()
+    }
+
     suspend fun login(usernameInput: String, passwordInput: String, remember: Boolean): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val cleanUser = normalizeDigits(usernameInput.trim())
-            val cleanPass = passwordInput.trim()
+            val cleanUser = normalizeUsername(usernameInput)
+            val typedPass = passwordInput.trim()
             val api = getApiService()
-            val tokenResp = api.login(
-                username = cleanUser,
-                password = cleanPass
-            )
+            var usedPass = typedPass
+            val tokenResp = try {
+                api.login(username = cleanUser, password = typedPass)
+            } catch (e: retrofit2.HttpException) {
+                // Persian-digit password fallback: retry once with Latin digits
+                val retryPass = normalizeDigitOnlyPassword(typedPass)
+                if ((e.code() == 400 || e.code() == 401) && retryPass != typedPass) {
+                    usedPass = retryPass
+                    api.login(username = cleanUser, password = retryPass)
+                } else {
+                    throw e
+                }
+            }
 
             val token = tokenResp.accessToken
             prefs.accessToken = token
@@ -124,7 +160,7 @@ class SamadRepository(
             prefs.username = cleanUser
             prefs.rememberPassword = remember
             if (remember) {
-                prefs.password = cleanPass
+                prefs.password = usedPass
             } else {
                 prefs.password = null
             }

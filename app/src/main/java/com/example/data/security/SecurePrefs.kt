@@ -29,7 +29,7 @@ class SecurePrefs(context: Context) {
         set(value) = prefs.edit().putString(KEY_PASSWORD, value).apply()
 
     var rememberPassword: Boolean
-        get() = prefs.getBoolean(KEY_REMEMBER_PW, true)
+        get() = prefs.getBoolean(KEY_REMEMBER_PW, false)
         set(value) = prefs.edit().putBoolean(KEY_REMEMBER_PW, value).apply()
 
     var baseUrl: String

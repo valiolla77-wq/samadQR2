@@ -110,7 +110,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(
         MainUiState(
-            isLoggedIn = prefs.isTokenValid() || !prefs.username.isNullOrBlank(),
+            isLoggedIn = prefs.isTokenValid(),
             studentName = prefs.studentName,
             studentNumber = prefs.studentNumber,
             studentMajor = prefs.studentMajor,

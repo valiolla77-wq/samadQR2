@@ -237,10 +237,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 fetchReserves(isManualRefresh = false)
             } else {
+                val detailedError = repository.formatLoginErrorMessage(result.exceptionOrNull())
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        errorMessage = "ورود ناموفق بود. نام کاربری یا رمز عبور اشتباه است یا سامانه در دسترس نیست."
+                        errorMessage = detailedError
                     )
                 }
             }
@@ -396,11 +397,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateBaseUrl(newUrl: String) {
-        val cleanUrl = newUrl.trim()
-        if (cleanUrl.isNotBlank()) {
-            prefs.baseUrl = cleanUrl
-            _uiState.update { it.copy(baseUrl = prefs.baseUrl, infoMessage = "آدرس سرور ذخیره شد.") }
+        val raw = newUrl.trim()
+        if (raw.isBlank()) return
+        if (raw.startsWith("http://", ignoreCase = true)) {
+            _uiState.update { it.copy(errorMessage = "تنها آدرس امن HTTPS پشتیبانی می‌شود.") }
+            return
         }
+        val withScheme = if (raw.startsWith("https://", ignoreCase = true)) raw else "https://$raw"
+        val normalized = if (withScheme.endsWith("/")) withScheme else "$withScheme/"
+        prefs.baseUrl = normalized
+        _uiState.update { it.copy(baseUrl = prefs.baseUrl, infoMessage = "آدرس سرور ذخیره شد: ${prefs.baseUrl}") }
     }
 
     fun toggleAutoSync(enabled: Boolean) {

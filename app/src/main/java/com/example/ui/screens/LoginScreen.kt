@@ -105,8 +105,13 @@ fun LoginScreen(
     val focusManager = LocalFocusManager.current
     val snackbarHostState = remember { SnackbarHostState() }
 
+    var inlineError by remember { mutableStateOf<String?>(null) }
+    var showServerDialog by remember { mutableStateOf(false) }
+    var serverUrlDraft by remember(uiState.baseUrl) { mutableStateOf(uiState.baseUrl) }
+
     val handleLoginAction: () -> Unit = {
         focusManager.clearFocus()
+        inlineError = null
         val isStoredPassword = viewModel.prefs.rememberPassword &&
                 !viewModel.prefs.password.isNullOrBlank() &&
                 password == viewModel.prefs.password
@@ -133,6 +138,14 @@ fun LoginScreen(
 
     LaunchedEffect(uiState.errorMessage) {
         uiState.errorMessage?.let {
+            inlineError = it
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearMessages()
+        }
+    }
+
+    LaunchedEffect(uiState.infoMessage) {
+        uiState.infoMessage?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.clearMessages()
         }
@@ -438,7 +451,96 @@ fun LoginScreen(
                                         Text("ورود سریع با اثر انگشت", color = SamadPrimary, fontWeight = FontWeight.Bold)
                                     }
                                 }
+                                if (!inlineError.isNullOrBlank()) {
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f))
+                                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                                            .testTag("login_error_banner")
+                                    ) {
+                                        Text(
+                                            text = inlineError!!,
+                                            color = MaterialTheme.colorScheme.onErrorContainer,
+                                            fontSize = 12.sp,
+                                            lineHeight = 18.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+                                androidx.compose.material3.TextButton(
+                                    onClick = {
+                                        serverUrlDraft = uiState.baseUrl
+                                        showServerDialog = true
+                                    },
+                                    modifier = Modifier
+                                        .align(Alignment.CenterHorizontally)
+                                        .testTag("server_url_button")
+                                ) {
+                                    Text(
+                                        text = "آدرس سرور: ${uiState.baseUrl.removePrefix("https://").removeSuffix("/")} (تغییر)",
+                                        fontSize = 11.sp,
+                                        color = SamadPrimary,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
                             }
+                        }
+
+                        if (showServerDialog) {
+                            androidx.compose.material3.AlertDialog(
+                                onDismissRequest = { showServerDialog = false },
+                                title = {
+                                    Text(
+                                        text = "تنظیم آدرس سرور سماد",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                },
+                                text = {
+                                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        Text(
+                                            text = "اگر سامانه سماد دانشگاه شما روی دامنه دیگری است، آدرس HTTPS آن را وارد کنید:",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        OutlinedTextField(
+                                            value = serverUrlDraft,
+                                            onValueChange = { serverUrlDraft = it },
+                                            label = { Text("آدرس سرور (HTTPS)") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        androidx.compose.material3.TextButton(
+                                            onClick = {
+                                                serverUrlDraft = com.example.data.security.SecurePrefs.DEFAULT_BASE_URL
+                                            }
+                                        ) {
+                                            Text("بازگشت به سرور پیش‌فرض (saba.tvu.ac.ir)")
+                                        }
+                                    }
+                                },
+                                confirmButton = {
+                                    Button(
+                                        onClick = {
+                                            viewModel.updateBaseUrl(serverUrlDraft)
+                                            showServerDialog = false
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = SamadPrimary)
+                                    ) {
+                                        Text("ذخیره", color = Color.White)
+                                    }
+                                },
+                                dismissButton = {
+                                    androidx.compose.material3.TextButton(onClick = { showServerDialog = false }) {
+                                        Text("انصراف")
+                                    }
+                                }
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))

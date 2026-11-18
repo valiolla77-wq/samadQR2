@@ -214,8 +214,21 @@ class SamadRepository(
                 "سرور سماد ($baseUrl) یافت نشد. اتصال اینترنت یا آدرس سرور را بررسی کنید."
             e is java.net.ConnectException ->
                 "امکان برقراری ارتباط با سرور سماد ($baseUrl) وجود ندارد."
-            e is javax.net.ssl.SSLException || e is java.security.cert.CertificateException ->
-                "خطای گواهی امنیتی (SSL) در اتصال به $baseUrl؛ تاریخ و ساعت دستگاه یا آدرس سرور را بررسی کنید."
+            e is javax.net.ssl.SSLException || e is java.security.cert.CertificateException -> {
+                val causes = generateSequence(e as Throwable?) { it.cause }.toList()
+                val detail = when {
+                    causes.any { it is java.security.cert.CertificateExpiredException } ->
+                        "تاریخ گواهی سرور منقضی شده است."
+                    causes.any { it is java.security.cert.CertificateNotYetValidException } ->
+                        "تاریخ/ساعت گوشی با گواهی سرور هم‌خوان نیست؛ ساعت دستگاه را درست کنید."
+                    causes.any { it.message?.contains("Trust anchor", ignoreCase = true) == true } ->
+                        "زنجیره‌ی گواهی سرور روی این گوشی شناخته نمی‌شود (گواهی ریشه نصب نیست)."
+                    causes.any { it is javax.net.ssl.SSLPeerUnverifiedException } ->
+                        "گواهی با دامنه‌ی $baseUrl مطابقت ندارد؛ احتمالاً VPN/پروکسی ارتباط را رمزگشایی می‌کند."
+                    else -> e.message ?: "خطای نامشخص TLS."
+                }
+                "خطای امنیتی اتصال (SSL) به $baseUrl: $detail"
+            }
             else -> {
                 val msg = e.localizedMessage?.takeIf { it.isNotBlank() }
                 if (msg != null) "خطای ورود: $msg" else "ورود ناموفق بود. لطفاً مجدداً تلاش کنید."

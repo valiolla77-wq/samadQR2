@@ -1,4 +1,4 @@
-import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+﻿import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
 
 plugins {
   alias(libs.plugins.android.application)
@@ -16,8 +16,8 @@ android {
     applicationId = "com.aistudio.samadfoodqr.vfcklz"
     minSdk = 24
     targetSdk = 36
-    versionCode = 13
-    versionName = "1.6.3"
+    versionCode = 14
+    versionName = "1.6.4"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     buildConfigField("String", "ALLOWED_UPDATE_REPO", "\"valiolla77-wq/samadQR\"")
@@ -155,3 +155,4 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 }
+

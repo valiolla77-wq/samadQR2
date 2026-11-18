@@ -63,11 +63,11 @@ jobs:
       - name: Assemble Debug APK
         run: ./gradlew assembleDebug --no-daemon
 
-  # Release job: ONLY triggers on git tags matching v* or manual workflow_dispatch
+  # Release job: triggers on v* tags, manual workflow_dispatch, or main push when version isn't released yet
   publish-release:
     name: Build & Publish Release APK
     needs: build-and-test
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -76,19 +76,57 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Check Release Tag Status
+        id: check_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ github.event.inputs.tag_name }}
+          REF_NAME: ${{ github.ref_name }}
+          REF: ${{ github.ref }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          GRADLE_VERSION=$(grep 'versionName = ' app/build.gradle.kts | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ -z "$GRADLE_VERSION" ]; then
+            GRADLE_VERSION="1.6.2"
+          fi
+          TAG="$INPUT_TAG"
+          if [ -z "$TAG" ]; then
+            if [[ "$REF" == refs/tags/* ]]; then
+              TAG="$REF_NAME"
+            else
+              TAG="v${GRADLE_VERSION}"
+            fi
+          fi
+          if [[ ! "$TAG" =~ ^v ]]; then
+            TAG="v${TAG}"
+          fi
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG")
+          if [ "$STATUS" = "200" ] && [ "$EVENT_NAME" = "push" ] && [ "$REF" = "refs/heads/main" ]; then
+            echo "Release $TAG already exists on ${{ github.repository }}; skipping auto-release."
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Proceeding to build and publish release $TAG."
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up JDK 21
+        if: steps.check_release.outputs.should_publish == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '21'
 
       - name: Setup Gradle
+        if: steps.check_release.outputs.should_publish == 'true'
         uses: gradle/actions/setup-gradle@v4
 
       - name: Make Gradle executable
+        if: steps.check_release.outputs.should_publish == 'true'
         run: chmod +x ./gradlew
 
       - name: Prepare Signing Keystore
+        if: steps.check_release.outputs.should_publish == 'true'
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
@@ -116,9 +154,11 @@ jobs:
           fi
 
       - name: Build Android Release APKs
+        if: steps.check_release.outputs.should_publish == 'true'
         run: ./gradlew assembleRelease --no-daemon
 
       - name: Collect APKs and Generate SHA-256 Checksums
+        if: steps.check_release.outputs.should_publish == 'true'
         id: prepare_assets
         env:
           INPUT_TAG: ${{ github.event.inputs.tag_name }}
@@ -177,6 +217,7 @@ jobs:
           echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release & Upload Assets
+        if: steps.check_release.outputs.should_publish == 'true'
         uses: softprops/action-gh-release@v2
         env:
           INPUT_TITLE: ${{ github.event.inputs.release_name }}
